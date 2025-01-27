@@ -21,7 +21,6 @@ def main():
     company = st.sidebar.selectbox("Wybierz spółkę", list(company_map.keys()))
     company_key = company_map[company]
 
-
     paths = {
         "daily_data": f"data/{company_key}/{company_key}_d.csv",
         "financial_data": f"data/{company_key}/{company_key}_dane.csv",
@@ -30,7 +29,7 @@ def main():
         "valuation": f"data/{company_key}/{company_key}_wr_wskaźniki.csv"
     }
 
-
+    # Zakładki
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "Ceny akcji",
         "Rentowność",
@@ -114,7 +113,7 @@ def main():
                 else:
                     st.error("Nie udało się przygotować danych przepływów pieniężnych do prognozowania.")
             else:
-                st.error("Za mało danych do przeprowadzenia prognozy. Wyświetlam surowe dane.")
+                st.warning("Za mało danych do przeprowadzenia prognozy. Wyświetlam surowe dane.")
                 st.line_chart(cash_flow_data.set_index("Data-Kwartał"))
         else:
             st.error("Nie udało się wczytać danych przepływów pieniężnych.")
@@ -132,41 +131,47 @@ def main():
             if len(valuation_data) > 10:
                 valuation_model = ForecastModel()
                 valuation_model.load_data(valuation_data, date_col="Data-Kwartał", value_col="wynik_spolki")
-                valuation_model.train_model(changepoint_prior_scale=0.05, seasonality_prior_scale=5)
-                valuation_forecast = valuation_model.predict_future(days_ahead=365 * 3)
+                if valuation_model.df_prophet is not None:
+                    valuation_model.train_model(changepoint_prior_scale=0.05, seasonality_prior_scale=5)
+                    valuation_forecast = valuation_model.predict_future(days_ahead=365 * 3)
 
-                st.write("Prognoza wartości rynkowej:")
-                st.write(valuation_forecast)
-                st.pyplot(valuation_model.plot_forecast(confidence_reduction=0.5))
+                    st.write("Prognoza wartości rynkowej:")
+                    st.write(valuation_forecast)
+                    st.pyplot(valuation_model.plot_forecast(confidence_reduction=0.5))
+                else:
+                    st.error("Nie udało się przygotować danych do prognozowania.")
             else:
-                st.error("Za mało danych do przeprowadzenia prognozy. Wyświetlam surowe dane.")
+                st.warning("Za mało danych do przeprowadzenia prognozy. Wyświetlam surowe dane.")
                 st.line_chart(valuation_data.set_index("Data-Kwartał")[["wynik_spolki", "wynik_branzy"]])
         else:
             st.error("Nie udało się wczytać danych wartości rynkowej.")
 
-    # --- Zakładka 5: Dane finansowe ---
     with tab5:
         st.subheader(f"Dane finansowe: {company}")
-        financial_data = DataLoader.load_data(paths["financial_data"])
+    financial_data = DataLoader.load_data(paths["financial_data"])
 
-        if financial_data is not None:
-            st.write("Dane finansowe załadowane:")
-            st.write(financial_data.head())
+    if financial_data is not None:
+        st.write("Dane finansowe załadowane:")
+        st.write(financial_data.head())
 
-            if "Przychody odsetkowe" in financial_data.columns and len(financial_data) > 10:
-                arima_model = ARIMAForecastModel()
-                arima_model.load_data(financial_data, date_col="Data", value_col="Przychody odsetkowe")
-                arima_model.train_model()
-                arima_forecast = arima_model.predict_future(periods=12)
+        st.write("Dostępne kolumny w danych finansowych:")
+        st.write(financial_data.columns.tolist())
 
-                st.write("Prognoza przychodów odsetkowych (ARIMA):")
-                st.write(arima_forecast)
-                st.pyplot(arima_model.plot_forecast(x_label="Data", y_label="Przychody odsetkowe"))
-            else:
-                st.error("Za mało danych do przeprowadzenia prognozy ARIMA.")
-                st.line_chart(financial_data.set_index("Data")[["Przychody odsetkowe"]])
+        if "Przychody odsetkowe" in financial_data.columns and len(financial_data) > 10:
+            arima_model = ARIMAForecastModel()
+            arima_model.load_data(financial_data, date_col="Data", value_col="Przychody odsetkowe")
+            arima_model.train_model()
+            arima_forecast = arima_model.predict_future(periods=12)
+
+            st.write("Prognoza przychodów odsetkowych (ARIMA):")
+            st.write(arima_forecast)
+            st.pyplot(arima_model.plot_forecast(x_label="Data", y_label="Przychody odsetkowe"))
         else:
-            st.error("Nie udało się wczytać danych finansowych.")
+            st.warning("Brak wystarczających danych lub brak kolumny 'Przychody odsetkowe'.")
+            if "Data" in financial_data.columns:
+                st.line_chart(financial_data.set_index("Data"))
+    else:
+        st.error("Nie udało się wczytać danych finansowych.")
 
 
 if __name__ == "__main__":
